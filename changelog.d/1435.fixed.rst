@@ -1,0 +1,2 @@
+Fixed a reference cycle in the asyncio backend that kept cancelled child tasks alive
+until cyclic garbage collection.

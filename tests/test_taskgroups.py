@@ -1989,6 +1989,32 @@ async def test_start_return_handle_cancel() -> None:
     ),
 )
 class TestRefcycles:
+    @pytest.mark.parametrize("anyio_backend", asyncio_params)
+    @pytest.mark.parametrize(
+        "started", [True, False], ids=["after-start", "during-start"]
+    )
+    async def test_cancelled_child_refcycle(self, started: bool) -> None:
+        cancellations: list[CancelledError] = []
+
+        async def child(*, task_status: TaskStatus[None]) -> None:
+            if started:
+                task_status.started()
+            else:
+                scope.cancel()
+
+            try:
+                await sleep_forever()
+            except CancelledError as exc:
+                cancellations.append(exc)
+                raise
+
+        async with create_task_group() as tg:
+            with CancelScope() as scope:
+                await tg.start(child)
+                tg.cancel_scope.cancel()
+
+        assert gc.get_referrers(cancellations.pop()) == no_other_refs()
+
     async def test_exception_refcycles_direct(self) -> None:
         """
         Test that TaskGroup doesn't keep a reference to the raised ExceptionGroup
